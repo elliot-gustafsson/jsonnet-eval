@@ -5,6 +5,14 @@ use std::ptr::NonNull;
 use std::slice;
 use std::str;
 
+use crate::arena::Allocator;
+use crate::interner::Interner;
+
+const INT_SIZE: usize = size_of::<isize>();
+const INT_ALIGN: usize = align_of::<isize>();
+const VALUE_SIZE: usize = size_of::<Value>();
+const VALUE_ALIGN: usize = align_of::<Value>();
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum ValueType {
@@ -109,19 +117,65 @@ impl<'a> Value<'a> {
     // --- Constructors ---
 
     #[inline(always)]
-    pub fn number(v: f64) -> Self {
+    pub fn make_string(allocator: &'a Allocator, s: &str) -> Self {
+        Self::make_string_from_bytes(allocator, s.as_bytes())
+    }
+
+    #[inline(always)]
+    pub fn make_string_from_bytes(allocator: &'a Allocator, b: &[u8]) -> Self {
+        let n = b.len();
+
+        let total_size = INT_SIZE + n;
+        let ptr = allocator.aligned_alloc(total_size, INT_ALIGN);
+
+        unsafe {
+            // write len at beginning of block
+            *(ptr as *mut usize) = n;
+
+            // write data
+            let byte_ptr = ptr.add(INT_SIZE);
+            std::ptr::copy_nonoverlapping(b.as_ptr(), byte_ptr, n);
+        }
+
+        Self::box_ptr(ValueType::String, ptr)
+    }
+
+    #[inline(always)]
+    pub fn make_string_concat(allocator: &'a Allocator, v1: &str, v2: &str) -> Self {
+        let n1 = v1.len();
+        let n2 = v2.len();
+        let n = n1 + n2;
+
+        let total_size = INT_SIZE + n;
+        let ptr = allocator.aligned_alloc(total_size, INT_ALIGN);
+
+        unsafe {
+            // write len at beginning of block
+            *(ptr as *mut usize) = n;
+
+            // write data
+            let byte_ptr = ptr.add(INT_SIZE);
+            std::ptr::copy_nonoverlapping(v1.as_ptr(), byte_ptr, n1);
+            std::ptr::copy_nonoverlapping(v2.as_ptr(), byte_ptr.add(n1), n2);
+        }
+
+        Self::box_ptr(ValueType::String, ptr)
+    }
+
+    #[inline(always)]
+    pub const fn make_string_const(id: u32) -> Self {
+        // Set lowest bit to 1 to signal it's an interned string
+        Self::from_raw(((ValueType::String as u64) << Self::TYPE_SHIFT) | ((id as u64) << 1) | 1)
+    }
+
+    #[inline(always)]
+    pub fn make_number(v: f64) -> Self {
         let bits = if v.is_nan() {
             Self::CANONICAL_NAN_BITS
         } else {
             v.to_bits()
         };
         Self::from_raw(bits ^ Self::NAN_TAG)
-    }
-
-    #[inline(always)]
-    pub const fn string_const(id: u32) -> Self {
-        // Set lowest bit to 1 to signal it's an interned string
-        Self::from_raw(((ValueType::String as u64) << Self::TYPE_SHIFT) | ((id as u64) << 1) | 1)
     }
 
     // #[inline]
@@ -174,20 +228,54 @@ impl<'a> Value<'a> {
         // SAFETY: Tags in 0..=9 correspond directly to ValueType variants.
         unsafe { std::mem::transmute::<u8, ValueType>(t as u8) }
     }
+
+    #[inline(always)]
+    const fn payload(self) -> usize {
+        (self.0 & !Self::TAG_MASK) as usize
+    }
+
+    #[inline]
+    pub fn string(self, interner: &'a Interner<'a>) -> &'a str {
+        debug_assert_eq!(self.type_of(), ValueType::String);
+
+        if (self.0 & 1) == 1 {
+            let id = (self.payload() >> 1) as u32;
+            return interner.get(id);
+        }
+
+        unsafe {
+            let ptr = self.unbox_ptr::<u8>();
+            let n = *(ptr as *const usize);
+            let bytes = slice::from_raw_parts(ptr.add(INT_SIZE), n);
+            str::from_utf8_unchecked(bytes)
+        }
+    }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+#[cfg(test)]
+mod tests {
 
-//     #[test]
-//     fn test_add() {
-//         assert_eq!(add(2, 2), 4);
-//     }
+    use super::*;
 
-//     // #[test]
-//     // #[should_panic(expected = "divide by zero")]
-//     // fn test_panic() {
-//     //     panic!("divide by zero");
-//     // }
-// }
+    #[test]
+    fn test_create_string() {
+        let allocator = Allocator::new();
+        let interner = Interner::new();
+
+        let v = Value::make_string(&allocator, "Hello World!");
+
+        assert_eq!(ValueType::String, v.type_of(),);
+        assert_eq!("Hello World!", v.string(&interner),);
+    }
+
+    #[test]
+    fn test_create_concat_strings() {
+        let allocator = Allocator::new();
+        let interner = Interner::new();
+
+        let v = Value::make_string_concat(&allocator, "Hello ", "World!");
+
+        assert_eq!(ValueType::String, v.type_of(),);
+        assert_eq!("Hello World!", v.string(&interner),);
+    }
+}

@@ -1,25 +1,31 @@
-use crate::{arena::allocator::Allocator, interner::Interner};
+use crate::arena::allocator::Allocator;
+use crate::evaluator::{Context, ContextState};
+use crate::interner::Interner;
 
 mod arena;
 mod evaluator;
 mod interner;
 
 fn main() {
-    let allocator = Allocator::new();
-    let mut interner = Interner::new();
+    let state = ContextState {
+        max_stack: 10000,
+        interner: &Interner::new(),
+        allocator: &Allocator::new(),
+    };
+    let ctx = Context::new(&state);
 
-    let stuff = allocator.alloc::<&str>(3);
+    let stuff = ctx.state.allocator.alloc::<&str>(3);
 
     stuff[0] = "hello";
     stuff[1] = "rusty";
     stuff[2] = "world!";
 
-    let s_ids = allocator.alloc::<u32>(3);
+    let s_ids = ctx.state.allocator.alloc::<u32>(3);
     for i in 0..stuff.len() {
-        s_ids[i] = interner.intern(stuff[i]);
+        s_ids[i] = ctx.state.interner.intern(stuff[i]);
     }
 
     for i in 0..s_ids.len() {
-        println!("{}", interner.get(s_ids[i]));
+        println!("{}", ctx.state.interner.get(s_ids[i]));
     }
 }

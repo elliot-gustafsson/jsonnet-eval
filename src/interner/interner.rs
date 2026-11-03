@@ -1,4 +1,4 @@
-use std::slice;
+use std::cell::UnsafeCell;
 use std::str;
 
 use super::rapidhash::hash_string;
@@ -12,7 +12,9 @@ struct Entry {
     idx: u32,
 }
 
-pub struct Interner<'a> {
+pub struct Interner<'a>(UnsafeCell<InternerInner<'a>>);
+
+struct InternerInner<'a> {
     table: Vec<Entry>,
     strings: Vec<&'a str>,
     mask: u32,
@@ -30,14 +32,30 @@ impl<'a> Interner<'a> {
         let mut strings = Vec::with_capacity((DEFAULT_INTERNER_SIZE * 3) / 4);
         strings.push(""); // burn 0 index
 
-        Self {
+        Self(UnsafeCell::new(InternerInner {
             table: vec![Entry::default(); DEFAULT_INTERNER_SIZE],
             strings,
             mask: DEFAULT_INTERNER_MASK,
             count: 0,
-        }
+        }))
     }
 
+    #[inline(always)]
+    pub fn intern(&self, s: &'a str) -> u32 {
+        unsafe { (*self.0.get()).intern(s) }
+    }
+
+    #[inline(always)]
+    pub fn get(&self, id: u32) -> &'a str {
+        unsafe { (*self.0.get()).get(id) }
+    }
+
+    pub fn reset(&mut self) {
+        self.0.get_mut().reset();
+    }
+}
+
+impl<'a> InternerInner<'a> {
     #[inline]
     pub fn intern(&mut self, s: &'a str) -> u32 {
         let h = hash_string(s) as u32;
@@ -132,12 +150,12 @@ mod tests {
 
     #[test]
     fn test_intern() {
-        let mut interner = Interner::new();
+        let interner = Interner::new();
 
         let res1 = interner.intern("test1");
         let res2 = interner.intern("test2");
 
-        assert!(interner.get(res1) == "test1");
-        assert!(interner.get(res2) == "test2");
+        assert_eq!("test1", interner.get(res1));
+        assert_eq!("test2", interner.get(res2));
     }
 }
