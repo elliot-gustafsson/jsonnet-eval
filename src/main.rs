@@ -3,6 +3,7 @@ use crate::evaluator::{Context, ContextState};
 use crate::interner::Interner;
 
 mod arena;
+mod ast;
 mod evaluator;
 mod interner;
 

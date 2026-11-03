@@ -9,3 +9,4 @@ codegen-units = 1
 panic = "abort"
 
 [dependencies]
+memchr = "2.7"
