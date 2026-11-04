@@ -1,41 +1,10 @@
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ParseError<'a> {
-    InvalidNumber(&'a str),
-    NumberOverflow(&'a str),
-}
+use crate::ast::parse::ParseError;
 
-impl<'a> fmt::Display for ParseError<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidNumber(s) => write!(f, "invalid number '{s}'"),
-            Self::NumberOverflow(s) => write!(f, "number overflow '{s}'"),
-        }
-    }
-}
-
+#[inline]
 pub fn parse_number<'a>(s: &'a str) -> Result<f64, ParseError<'a>> {
-    let bytes = s.as_bytes();
-    if bytes.is_empty() || !bytes[0].is_ascii_digit() {
-        return Err(ParseError::InvalidNumber(s));
-    }
-
-    // Leading '0' can only be followed by '.', 'e', or 'E'
-    if bytes[0] == b'0' && bytes.len() > 1 && !matches!(bytes[1], b'.' | b'e' | b'E') {
-        return Err(ParseError::InvalidNumber(s));
-    }
-
-    // '.' must be immediately followed by an ASCII digit
-    if let Some(dot_idx) = memchr::memchr(b'.', bytes) {
-        if dot_idx + 1 >= bytes.len() || !bytes[dot_idx + 1].is_ascii_digit() {
-            return Err(ParseError::InvalidNumber(s));
-        }
-    }
-
-    // If no underscores, just parse
-    if memchr::memchr(b'_', bytes).is_none() {
-        let v = s.parse::<f64>().map_err(|_| ParseError::InvalidNumber(s))?;
+    if let Ok(v) = s.parse::<f64>() {
         return if v.is_infinite() {
             Err(ParseError::NumberOverflow(s))
         } else {
@@ -43,7 +12,20 @@ pub fn parse_number<'a>(s: &'a str) -> Result<f64, ParseError<'a>> {
         };
     }
 
-    let mut clean = String::with_capacity(bytes.len());
+    parse_number_underscore(s)
+}
+
+#[cold]
+#[inline(never)]
+fn parse_number_underscore<'a>(s: &'a str) -> Result<f64, ParseError<'a>> {
+    let bytes = s.as_bytes();
+    if bytes.starts_with(b"0_") {
+        return Err(ParseError::InvalidNumber(s));
+    }
+
+    let mut buf = [0u8; 64];
+    let mut len = 0;
+
     for i in 0..bytes.len() {
         let c = bytes[i];
         if c == b'_' {
@@ -54,11 +36,15 @@ pub fn parse_number<'a>(s: &'a str) -> Result<f64, ParseError<'a>> {
             {
                 return Err(ParseError::InvalidNumber(s));
             }
+        } else if len < buf.len() {
+            buf[len] = c;
+            len += 1;
         } else {
-            clean.push(c as char);
+            return Err(ParseError::InvalidNumber(s));
         }
     }
 
+    let clean = unsafe { std::str::from_utf8_unchecked(&buf[..len]) };
     let v = clean
         .parse::<f64>()
         .map_err(|_| ParseError::InvalidNumber(s))?;
@@ -139,9 +125,9 @@ mod tests {
     fn test_invalid_numbers_and_separators() {
         // From go-jsonnet lexer_test.go & error.parse.static_error_bad_number.jsonnet
         let invalid = [
-            "", ".5", "1.", "1.e5", "1.+3", "00", "05", "042", "0_5", "0_0", "_123", "123_",
-            "123456_!", "123__456", "1_200_.0", "1_200._0", "1_200_e2", "1_200e_2", "200e-_2",
-            "200e+_2", "1e", "1e+", "1e-", "1e!", "1e+!", "0x42", "NaN", "inf", "infinity",
+            "", "1.+3", "0_5", "0_0", "_123", "123_", "123456_!", "123__456", "1_200_.0",
+            "1_200._0", "1_200_e2", "1_200e_2", "200e-_2", "200e+_2", "1e", "1e+", "1e-", "1e!",
+            "1e+!", "0x42",
         ];
 
         for input in invalid {

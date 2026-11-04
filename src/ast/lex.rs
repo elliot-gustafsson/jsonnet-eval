@@ -114,8 +114,8 @@ impl<'a> Token<'a> {
 }
 
 pub struct Lexer<'a> {
-    data: &'a [u8],
-    pos: usize,
+    pub data: &'a [u8],
+    pub pos: usize,
 }
 
 // - `memchr::memchr(b'\n', slice)` → `strings.IndexByte`
@@ -162,6 +162,28 @@ impl<'a> Lexer<'a> {
             b';' => return Ok(Token::new(TokenKind::Semicolon, ";", start as u32)),
             b'$' => return Ok(Token::new(TokenKind::Dollar, "$", start as u32)),
             b'"' | b'\'' => return self.lex_string(c, start),
+            b'@' => {
+                if self.pos < self.data.len()
+                    && (self.data[self.pos] == b'"' || self.data[self.pos] == b'\'')
+                {
+                    let quote_type = self.data[self.pos];
+                    self.pos += 1;
+                    return self.lex_verbatim_string(quote_type, start);
+                }
+                return Err(UnexpectedChar(c));
+            }
+            b'|' => {
+                if self.pos + 1 < self.data.len()
+                    && self.data[self.pos] == b'|'
+                    && self.data[self.pos + 1] == b'|'
+                {
+                    self.pos += 2;
+                    return self.lex_block_string(start);
+                }
+                // Otherwise, it's an operator starting with |
+                self.pos -= 1;
+                return self.lex_operator(start);
+            }
             _ => {}
         }
 
@@ -244,6 +266,16 @@ impl<'a> Lexer<'a> {
             self.slice(start + 1, self.pos - 1),
             start as u32,
         ))
+    }
+
+    fn lex_verbatim_string(&mut self, quote_type: u8, start: usize) -> Result<Token<'a>, LexError> {
+        todo!("lex_verbatim_string");
+        Ok(Token::new(TokenKind::String, "", start as u32))
+    }
+
+    fn lex_block_string(&mut self, start: usize) -> Result<Token<'a>, LexError> {
+        todo!("lex_block_string");
+        Ok(Token::new(TokenKind::String, "", start as u32))
     }
 
     fn lex_number(&mut self, start: usize) -> Result<Token<'a>, LexError> {
@@ -329,7 +361,7 @@ const SYMBOL_TABLE: [bool; 256] = {
 
 #[inline(always)]
 fn is_digit(c: u8) -> bool {
-    c.is_ascii_digit() // equivalent to: matches!(c, b'0'..=b'9')
+    c.is_ascii_digit()
 }
 
 #[inline(always)]
