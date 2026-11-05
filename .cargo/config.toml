@@ -1,0 +1,11 @@
+# Applies to every profile, including dev and test.
+#
+# This is a `target.<cfg>` entry rather than `build.rustflags` on purpose:
+# cargo uses `target.*.rustflags` entries *instead of* `build.rustflags` when
+# any exist, and a user-level config that sets flags under
+# `[target.x86_64-unknown-linux-gnu]` would otherwise silently drop this one.
+# All matching `target.*` entries are joined together.
+#
+# A `RUSTFLAGS` environment variable replaces every config entry.
+[target.'cfg(all())']
+rustflags = ["-C", "target-cpu=native"]
