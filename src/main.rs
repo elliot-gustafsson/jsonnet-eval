@@ -1,11 +1,6 @@
-use crate::arena::allocator::Allocator;
-use crate::evaluator::{Context, ContextState};
-use crate::interner::Interner;
-
-mod arena;
-mod ast;
-mod evaluator;
-mod interner;
+use jsonnet_eval::arena::allocator::Allocator;
+use jsonnet_eval::evaluator::{Context, ContextState};
+use jsonnet_eval::interner::Interner;
 
 fn main() {
     let state = ContextState {

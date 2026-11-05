@@ -6,6 +6,8 @@ use std::slice;
 use std::str;
 
 use crate::arena::Allocator;
+use crate::evaluator::Context;
+use crate::evaluator::evaluator::EvaluationError;
 use crate::interner::Interner;
 
 const INT_SIZE: usize = size_of::<isize>();
@@ -249,6 +251,68 @@ impl<'a> Value<'a> {
             let bytes = slice::from_raw_parts(ptr.add(INT_SIZE), n);
             str::from_utf8_unchecked(bytes)
         }
+    }
+
+    #[inline(always)]
+    pub fn number(self) -> f64 {
+        debug_assert_eq!(self.type_of(), ValueType::Number);
+        f64::from_bits(self.0 ^ Self::NAN_TAG)
+    }
+
+    #[inline(always)]
+    pub fn is_none(self) -> bool {
+        self.0 == 0
+    }
+
+    #[inline(always)]
+    pub fn is_literal(self) -> bool {
+        self.type_of().is_literal()
+    }
+
+    #[inline(always)]
+    pub fn is_null(self) -> bool {
+        self.0 >> Value::TYPE_SHIFT == ValueType::Null as u64
+    }
+
+    #[inline(always)]
+    pub fn is_string(self) -> bool {
+        self.0 >> Value::TYPE_SHIFT == ValueType::String as u64
+    }
+
+    #[inline(always)]
+    pub fn is_number(self) -> bool {
+        self.0 >= Value::FLOAT_THRESHOLD
+    }
+
+    #[inline(always)]
+    pub fn is_bool(self) -> bool {
+        self.0 >> Value::TYPE_SHIFT == ValueType::Bool as u64
+    }
+
+    #[inline(always)]
+    pub fn is_thunk(self) -> bool {
+        self.0 >> Value::TYPE_SHIFT == ValueType::Thunk as u64
+    }
+
+    #[inline(always)]
+    pub fn is_object(self) -> bool {
+        self.0 >> Value::TYPE_SHIFT == ValueType::Object as u64
+    }
+
+    #[inline(always)]
+    pub fn is_function(self) -> bool {
+        let t = self.0 >> Value::TYPE_SHIFT;
+        t == ValueType::Function as u64 || t == ValueType::NativeFunction as u64
+    }
+
+    #[inline(always)]
+    pub fn is_array(self) -> bool {
+        self.0 >> Value::TYPE_SHIFT == ValueType::Array as u64
+    }
+
+    #[inline(always)]
+    pub fn eval(self, ctx: Context) -> Result<Value<'a>, EvaluationError> {
+        todo!("build eval");
     }
 }
 

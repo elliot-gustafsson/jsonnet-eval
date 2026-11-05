@@ -1,6 +1,6 @@
 mod ast;
 mod lex;
-mod parse;
+pub mod parse;
 mod utils;
 
 pub use ast::*;

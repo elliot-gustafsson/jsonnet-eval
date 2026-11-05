@@ -19,7 +19,7 @@ pub struct Context<'a> {
 
 pub struct Scope<'a> {
     pub bindings: &'a mut [NamedValue<'a>],
-    pub parent_ptr: usize,
+    pub parent: Option<&'a Scope<'a>>,
 }
 
 impl<'a> Context<'a> {
@@ -34,27 +34,17 @@ impl<'a> Context<'a> {
     }
 
     #[inline]
-    pub fn new_scope(self, parent_ptr: usize, length: usize) -> (&'a mut Scope<'a>, usize) {
+    pub fn new_scope(self, parent: Option<&'a Scope<'a>>, length: usize) -> &'a mut Scope<'a> {
         let s = self.state.allocator.create::<Scope<'a>>();
         let bindings = self.state.allocator.alloc::<NamedValue<'a>>(length);
-        // memclr_slice(bindings);
 
-        s.parent_ptr = parent_ptr;
+        s.parent = parent;
         s.bindings = bindings;
-
-        let ptr_addr = (s as *const Scope<'a>) as usize;
-        (s, ptr_addr)
+        s
     }
 
-    pub fn get_scope_bind(self, scope_ptr: usize, key: u32) -> Option<Value<'a>> {
-        if scope_ptr == 0 {
-            return None;
-        }
-
-        let mut curr_ptr = scope_ptr;
-
+    pub fn get_scope_bind(self, mut scope: &'a Scope<'a>, key: u32) -> Option<Value<'a>> {
         loop {
-            let scope = unsafe { &*(curr_ptr as *const Scope<'a>) };
             let bindings = &scope.bindings;
 
             for i in (0..bindings.len()).rev() {
@@ -63,13 +53,38 @@ impl<'a> Context<'a> {
                 }
             }
 
-            if scope.parent_ptr == 0 || scope.parent_ptr == curr_ptr {
-                break;
-            }
-
-            curr_ptr = scope.parent_ptr;
+            let Some(parent) = scope.parent else {
+                return None;
+            };
+            scope = parent;
         }
-
-        None
     }
+}
+
+// pub fn create_file_scope(filename: &str, base_std: Value, ctx: Context) -> &Scope {
+//     let allocator = ctx.state.allocator;
+
+//     let key_id = ctx.state.interner.intern("thisFile"); // TODO: make this static
+
+//     ctx.new_scope(parent_ptr, length)
+// }
+
+pub fn create_file_scope<'a>(
+    _filename: &'a str,
+    base_std: Value<'a>,
+    ctx: Context<'a>,
+) -> &'a Scope<'a> {
+    let _key_id = ctx.state.interner.intern("thisFile");
+
+    let s = ctx.new_scope(None, 2);
+    s.bindings[0] = NamedValue {
+        key: ctx.state.interner.intern("$std"),
+        value: base_std,
+    };
+    s.bindings[1] = NamedValue {
+        key: ctx.state.interner.intern("std"),
+        value: base_std,
+    };
+
+    s
 }

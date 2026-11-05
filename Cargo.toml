@@ -28,3 +28,6 @@ panic = "unwind"
 
 [dependencies]
 memchr = "2.7"
+itoa = "1.0"
+ryu = "1.0"
+fpfmt = "0.3"

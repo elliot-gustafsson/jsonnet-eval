@@ -49,6 +49,8 @@ impl Allocator {
     // Create type T in the arena.
     #[inline(always)]
     pub fn create<'a, T>(&'a self) -> &'a mut T {
+        const { assert!(!std::mem::needs_drop::<T>()) }
+
         let size = size_of::<T>();
         let align = align_of::<T>();
 
@@ -57,15 +59,14 @@ impl Allocator {
         }
 
         let ptr = self.aligned_alloc(size, align) as *mut T;
-        unsafe {
-            ptr.write_bytes(0, 1);
-            &mut *ptr
-        }
+        unsafe { &mut *ptr }
     }
 
     // Allocate a slice of type T in the arena with the provided lenght.
     #[inline(always)]
     pub fn alloc<'a, T>(&'a self, length: usize) -> &'a mut [T] {
+        const { assert!(!std::mem::needs_drop::<T>()) }
+
         if length == 0 {
             return &mut [];
         }
@@ -102,6 +103,8 @@ impl Allocator {
 
     // Realloc a slice of type T in the arena with the provided lenght.
     pub fn realloc<'a, T: Copy>(&'a self, slice: &'a mut [T], length: usize) -> &'a mut [T] {
+        const { assert!(!std::mem::needs_drop::<T>()) }
+
         let old_len = slice.len();
         if length <= old_len {
             return &mut slice[..length];
