@@ -8,5 +8,23 @@ lto = "thin"
 codegen-units = 1
 panic = "abort"
 
+# `cargo build --profile profiling`
+# codegen plus line tables, `perf` and flamegraphs attribute samples to source
+# lines and can resolve inlined frames.
+[profile.profiling]
+inherits = "release"
+debug = "line-tables-only"
+strip = "none"
+
+# `cargo build --profile release-debug`
+# like release, with full debug info, debug assertions and
+# overflow checks on, and unwinding panics so backtraces work.
+[profile.release-debug]
+inherits = "release"
+debug = true
+debug-assertions = true
+overflow-checks = true
+panic = "unwind"
+
 [dependencies]
 memchr = "2.7"
